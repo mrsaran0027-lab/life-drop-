@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LifeDrop — Blood Donation & Medical Appointments</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #F8F9FC; }
+    .navy-bg { background-color: #1F2A6B; }
+    .navy-text { color: #1F2A6B; }
+    .lavender-card { background-color: #E6E6F2; }
+    .blood-red { background-color: #DC2626; }
+    .blood-red-text { color: #DC2626; }
+  </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+  <!-- Top Global Header -->
+  <header class="navy-bg text-white px-5 py-3.5 shadow-md flex items-center justify-between border-b border-white/10 sticky top-0 z-50">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl blood-red flex items-center justify-center font-bold text-white shadow-md text-lg">
+        🩸
+      </div>
+      <div>
+        <h1 class="font-extrabold text-lg tracking-tight">LifeDrop</h1>
+        <p class="text-[10px] text-slate-300">Blood Logistics & Medical Appointments</p>
+      </div>
+    </div>
+
+    <!-- Role Indicator & Mode Switcher -->
+    <div class="flex items-center gap-2">
+      <button id="switchRoleBtn" class="bg-white/15 hover:bg-white/25 text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-white/20 transition flex items-center gap-1.5">
+        <span>🔄 Role:</span>
+        <span id="roleLabel" class="font-bold underline">User (Patient/Donor)</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main View Container -->
+  <main class="flex-1 p-4 md:p-6 max-w-6xl w-full mx-auto" id="appRoot">
+    <!-- Dynamic View Loaded Here via JavaScript -->
+  </main>
+
+  <!-- Mobile Bottom Nav -->
+  <nav class="md:hidden navy-bg text-white border-t border-white/10 px-3 py-2 flex justify-around text-xs sticky bottom-0 z-40" id="mobileNav">
+    <!-- Populated by JS -->
+  </nav>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"></div>
+
+  <!-- FIREBASE CONFIG & APPLICATION SCRIPT -->
+  <script type="module">
+    // Optional: Import Firebase SDK from CDN for direct backend connection
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, doc, setDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js";
+
+    // Standard Firebase Credentials (Replace with your Firebase console project settings)
+    const firebaseConfig = {
+      apiKey: "YOUR_FIREBASE_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "1234567890",
+      appId: "1:1234567890:web:abcdef"
+    };
+
+    let db = null;
+    try {
+      if (firebaseConfig.apiKey !== "YOUR_FIREBASE_API_KEY") {
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        console.log("Firebase Firestore connected successfully.");
+      }
+    } catch (e) {
+      console.warn("Running in local storage standalone mode:", e);
+    }
+
+    // STATE STORE
+    const STATE = {
+      role: 'user', // 'doctor' | 'user'
+      currentView: 'D1', // 'D1' | 'D2' | 'U1' | 'U2' | 'U3.1' | 'U3.2' | 'U4' | 'U5' | 'U6'
+      currentUser: {
+        name: '',
+        email: '',
+        bloodGroup: '',
+        phone: '',
+        city: '',
+        role: 'user',
+        isVerified: false
+      },
+      patientRequests: JSON.parse(localStorage.getItem('ld_html_requests') || '[]'),
+      donors: JSON.parse(localStorage.getItem('ld_html_donors') || '[]'),
+      appointments: JSON.parse(localStorage.getItem('ld_html_appointments') || '[]'),
+      groups: JSON.parse(localStorage.getItem('ld_html_groups') || '[]'),
+      activeMatch: JSON.parse(localStorage.getItem('ld_html_match') || 'null')
+    };
+
+    function saveState() {
+      localStorage.setItem('ld_html_requests', JSON.stringify(STATE.patientRequests));
+      localStorage.setItem('ld_html_donors', JSON.stringify(STATE.donors));
+      localStorage.setItem('ld_html_appointments', JSON.stringify(STATE.appointments));
+      localStorage.setItem('ld_html_groups', JSON.stringify(STATE.groups));
+      localStorage.setItem('ld_html_match', JSON.stringify(STATE.activeMatch));
+    }
+
+    function showToast(title, desc = '', type = 'info') {
+      const c = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `p-3 rounded-xl border shadow-lg bg-white text-slate-800 text-xs pointer-events-auto transition duration-200 border-${type === 'error' ? 'red' : 'blue'}-200`;
+      toast.innerHTML = `<p class="font-bold text-slate-900">${title}</p><p class="text-slate-500 mt-0.5">${desc}</p>`;
+      c.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+    // Blood compatibility helper
+    function isBloodCompatible(donor, recipient) {
+      const map = {
+        'O-': ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+'],
+        'O+': ['O+', 'A+', 'B+', 'AB+'],
+        'A-': ['A-', 'A+', 'AB-', 'AB+'],
+        'A+': ['A+', 'AB+'],
+        'B-': ['B-', 'B+', 'AB-', 'AB+'],
+        'B+': ['B+', 'AB+'],
+        'AB-': ['AB-', 'AB+'],
+        'AB+': ['AB+'],
+      };
+      return map[donor]?.includes(recipient) ?? false;
+    }
+
+    // VIEW ROUTER
+    function render() {
+      const root = document.getElementById('appRoot');
+      const roleLabel = document.getElementById('roleLabel');
+      roleLabel.textContent = STATE.role === 'doctor' ? 'Doctor / Hospital' : 'User (Patient/Donor)';
+
+      switch (STATE.currentView) {
+        case 'D1': root.innerHTML = viewD1(); break;
+        case 'D2': root.innerHTML = viewD2(); break;
+        case 'U1': root.innerHTML = viewU1(); break;
+        case 'U2': root.innerHTML = viewU2(); break;
+        case 'U3.1': root.innerHTML = viewU31(); break;
+        case 'U3.2': root.innerHTML = viewU32(); break;
+        case 'U4': root.innerHTML = viewU4(); break;
+        case 'U5': root.innerHTML = viewU5(); break;
+        case 'U6': root.innerHTML = viewU6(); break;
+      }
+      attachEvents();
+    }
+
+    // D1: LANDING & LOGIN
+    function viewD1() {
+      return `
+        <div class="max-w-md mx-auto my-8 bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
+          <div class="navy-bg p-6 text-white text-center">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-sky-200">D1 – Very First Page UI</span>
+            <h2 class="text-xl font-bold mt-1">LifeDrop Portal Access</h2>
+            <div class="mt-4 flex bg-black/20 p-1 rounded-xl">
+              <button id="tabDoc" class="flex-1 py-2 rounded-lg text-xs font-bold ${STATE.role === 'doctor' ? 'bg-white navy-text' : 'text-white'}">Admin & Doctor Login</button>
+              <button id="tabUser" class="flex-1 py-2 rounded-lg text-xs font-bold ${STATE.role === 'user' ? 'bg-white navy-text' : 'text-white'}">Patient & User Login</button>
+            </div>
+          </div>
+          <div class="p-6">
+            ${STATE.role === 'doctor' ? `
+              <form id="docLoginForm" class="space-y-4">
+                <div>
+                  <label class="block text-xs font-semibold text-slate-700 mb-1">Doctor Email / Hospital ID</label>
+                  <input type="email" id="docEmail" required placeholder="e.g. physician@hospital.org" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-700 mb-1">State License Number</label>
+                  <input type="text" id="docLicense" required placeholder="e.g. MD-94021" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-mono">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-700 mb-1">Password</label>
+                  <input type="password" id="docPass" required placeholder="••••••••" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs">
+                </div>
+                <button type="submit" class="w-full py-3 navy-bg text-white font-bold text-xs rounded-xl shadow-md">Enter Doctor Dashboard (D2)</button>
+              </form>
+            ` : `
+              <div class="text-center space-y-4">
+                <p class="text-xs text-slate-600">Access emergency blood transfusion requests and donor matching.</p>
+                <button id="goToU1Btn" class="w-full py-3 blood-red text-white font-bold text-xs rounded-xl shadow-md">Go to User Login & Sign-up (U1)</button>
+              </div>
+            `}
+          </div>
+        </div>
+      `;
+    }
+
+    // D2: DOCTOR DASHBOARD
+    function viewD2() {
+      return `
+        <div class="space-y-6">
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 flex justify-between items-center shadow-xs">
+            <div>
+              <span class="text-[10px] font-bold uppercase tracking-wider navy-text lavender-card px-2 py-0.5 rounded">D2 – Doctor Dashboard</span>
+              <h2 class="text-xl font-black text-slate-900 mt-1">Appointment Requests Queue</h2>
+              <p class="text-xs text-slate-500">Live synchronization with patient bookings</p>
+            </div>
+            <button id="navBackHomeBtn" class="text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg font-semibold">Home Menu</button>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-slate-200 divide-y divide-slate-100 overflow-hidden shadow-xs">
+            ${STATE.appointments.length === 0 ? `
+              <div class="p-8 text-center text-slate-400 text-xs">No appointment requests in queue yet. New bookings from U6 appear here.</div>
+            ` : STATE.appointments.map(apt => `
+              <div class="p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-sm text-slate-900">${apt.patientName}</span>
+                    <span class="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-600 uppercase font-bold">${apt.service}</span>
+                  </div>
+                  <p class="text-xs text-slate-500 mt-0.5">Date: ${apt.requestedDate} (${apt.requestedTime}) · Dept: ${apt.department || 'Clinical'}</p>
+                  ${apt.acceptedTimeSlot ? `<p class="text-xs font-bold text-emerald-700 mt-1">Confirmed Time: ${apt.acceptedTimeSlot}</p>` : ''}
+                </div>
+                <div class="flex items-center gap-2">
+                  ${apt.status === 'Pending' ? `
+                    <button class="acceptAptBtn px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg" data-id="${apt.id}">Accept & Pick Slot</button>
+                    <button class="cancelAptBtn px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold rounded-lg" data-id="${apt.id}">Cancel</button>
+                  ` : ''}
+                  <span class="text-xs px-2.5 py-1 rounded-full font-bold ${apt.status === 'Accepted' ? 'bg-emerald-100 text-emerald-800' : apt.status === 'Cancelled' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}">${apt.status}</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // U1: USER AUTH
+    function viewU1() {
+      return `
+        <div class="max-w-md mx-auto my-8 bg-white rounded-3xl border border-slate-200 shadow-xl p-6">
+          <div class="navy-bg -mx-6 -mt-6 p-5 text-white text-center rounded-t-3xl mb-5">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-sky-200">U1 – User Registration</span>
+            <h3 class="text-lg font-bold mt-0.5">Patient & Donor Portal</h3>
+          </div>
+          <form id="userSignupForm" class="space-y-3.5 text-xs">
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Full Name</label>
+              <input type="text" id="uName" required placeholder="Enter legal name" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Phone Number</label>
+              <input type="text" id="uPhone" required placeholder="SMS dispatch cell" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Blood Group</label>
+              <select id="uBloodGroup" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white font-bold">
+                <option value="O-">O- (Universal Donor)</option>
+                <option value="O+">O+</option>
+                <option value="A-">A-</option>
+                <option value="A+">A+</option>
+                <option value="B-">B-</option>
+                <option value="B+">B+</option>
+                <option value="AB-">AB-</option>
+                <option value="AB+">AB+</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">City / Region</label>
+              <input type="text" id="uCity" required placeholder="e.g. Metro City" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300">
+            </div>
+            <button type="submit" class="w-full py-3 navy-bg text-white font-bold rounded-xl shadow-md mt-2">Enter User Home (U2)</button>
+          </form>
+        </div>
+      `;
+    }
+
+    // U2: USER HOME
+    function viewU2() {
+      return `
+        <div class="space-y-6">
+          <div class="navy-bg text-white p-6 rounded-3xl shadow-lg flex justify-between items-center">
+            <div>
+              <span class="text-[10px] font-bold uppercase tracking-wider text-sky-200">U2 – User Home</span>
+              <h2 class="text-2xl font-black mt-1">Blood Donation & Transfusion Hub</h2>
+              <p class="text-xs text-slate-200 mt-0.5">Select your immediate requirement below:</p>
+            </div>
+            <div class="blood-red px-3 py-1.5 rounded-xl text-xs font-bold text-white shadow">${STATE.currentUser.bloodGroup || 'User'}</div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Patient Card -->
+            <div class="bg-white p-6 rounded-3xl border-2 border-slate-200 hover:border-red-500 shadow-sm flex flex-col justify-between">
+              <div>
+                <span class="text-xs font-bold blood-red-text bg-red-50 px-2 py-0.5 rounded">Emergency Transfusion</span>
+                <h3 class="text-xl font-black text-slate-900 mt-2">Patient Request</h3>
+                <p class="text-xs text-slate-500 font-semibold mb-3">(Request for Blood)</p>
+                <p class="text-xs text-slate-600">Broadcast an urgent request for blood units directly to nearest compatible donors.</p>
+              </div>
+              <button id="openPatientFormBtn" class="mt-6 w-full py-3 blood-red text-white font-bold text-xs rounded-xl shadow-md">Fill Patient Request Form</button>
+            </div>
+
+            <!-- Donor Card -->
+            <div class="bg-white p-6 rounded-3xl border-2 border-slate-200 hover:border-blue-700 shadow-sm flex flex-col justify-between">
+              <div>
+                <span class="text-xs font-bold navy-text lavender-card px-2 py-0.5 rounded">Volunteer Lifesaver</span>
+                <h3 class="text-xl font-black text-slate-900 mt-2">Donor Availability</h3>
+                <p class="text-xs text-slate-500 font-semibold mb-3">(Willing to Donate Person)</p>
+                <p class="text-xs text-slate-600">Register as ready to donate blood and review pending hospital trauma requests.</p>
+              </div>
+              <button id="openDonorFormBtn" class="mt-6 w-full py-3 navy-bg text-white font-bold text-xs rounded-xl shadow-md">Register Donor Availability Form</button>
+            </div>
+          </div>
+
+          <!-- Bottom Navigation Links -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+            <button id="navGroupsBtn" class="p-4 bg-white rounded-2xl border border-slate-200 text-left text-xs font-bold text-slate-800 shadow-xs hover:border-slate-400">
+              👥 U5: Blood Groups & Collectives
+            </button>
+            <button id="navAptBtn" class="p-4 bg-white rounded-2xl border border-slate-200 text-left text-xs font-bold text-slate-800 shadow-xs hover:border-slate-400">
+              🩺 U6: Request Doctor Consultation & Blood Tests
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    // U3.1: PATIENT VIEW (Donors list)
+    function viewU31() {
+      return `
+        <div class="space-y-5">
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 flex justify-between items-center shadow-xs">
+            <div>
+              <span class="text-[10px] font-bold uppercase tracking-wider blood-red-text bg-red-50 px-2 py-0.5 rounded">U3 (3.1) – Patient View</span>
+              <h2 class="text-xl font-black text-slate-900 mt-1">Shows Donor Info for Patient</h2>
+              <p class="text-xs text-slate-500">Sorted by nearest location to your hospital</p>
+            </div>
+            <button id="navHomeBtn" class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg font-semibold">Back to Home</button>
+          </div>
+
+          <div class="space-y-3">
+            ${STATE.donors.length === 0 ? `
+              <div class="bg-white p-10 rounded-3xl border border-slate-200 text-center text-xs text-slate-500">
+                No volunteer donors registered yet. Register via Donor Availability on Home.
+              </div>
+            ` : STATE.donors.map(d => `
+              <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                  <div class="w-12 h-12 rounded-xl blood-red text-white flex items-center justify-center font-black text-sm">${d.bloodGroup}</div>
+                  <div>
+                    <h4 class="font-bold text-sm text-slate-900">${d.donorName}</h4>
+                    <p class="text-xs text-slate-500">Distance: ${d.distanceKm || 1.2} km · Location: ${d.location || 'Local area'}</p>
+                  </div>
+                </div>
+                <button class="reqDonorBtn px-4 py-2 blood-red text-white text-xs font-bold rounded-xl shadow-xs" data-id="${d.id}">Request Blood</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // U3.2: DONOR VIEW (Patient requests)
+    function viewU32() {
+      return `
+        <div class="space-y-5">
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 flex justify-between items-center shadow-xs">
+            <div>
+              <span class="text-[10px] font-bold uppercase tracking-wider navy-text lavender-card px-2 py-0.5 rounded">U3 (3.2) – Donor View</span>
+              <h2 class="text-xl font-black text-slate-900 mt-1">Shows Patient Info for Donor</h2>
+              <p class="text-xs text-slate-500">Incoming hospital trauma & emergency requests</p>
+            </div>
+            <button id="navHomeBtn2" class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg font-semibold">Back to Home</button>
+          </div>
+
+          <div class="space-y-3">
+            ${STATE.patientRequests.length === 0 ? `
+              <div class="bg-white p-10 rounded-3xl border border-slate-200 text-center text-xs text-slate-500">
+                No patient requests currently pending. Create a request via Patient Request on Home.
+              </div>
+            ` : STATE.patientRequests.map(r => `
+              <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                  <div class="w-12 h-12 rounded-xl navy-bg text-white flex items-center justify-center font-black text-sm">${r.bloodGroup}</div>
+                  <div>
+                    <h4 class="font-bold text-sm text-slate-900">${r.patientName} (${r.units} Units)</h4>
+                    <p class="text-xs text-slate-500">Hospital: ${r.hospital} · Urgency: <span class="font-bold blood-red-text">${r.urgency}</span></p>
+                  </div>
+                </div>
+                <button class="acceptReqBtn px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-xs" data-id="${r.id}">Accept & Match</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // U4: MATCHING PAGE
+    function viewU4() {
+      if (!STATE.activeMatch) {
+        return `
+          <div class="max-w-md mx-auto my-12 bg-white p-8 rounded-3xl border border-slate-200 text-center space-y-3">
+            <h3 class="font-bold text-base text-slate-900">No Active Match in Progress</h3>
+            <p class="text-xs text-slate-500">A match activates when a volunteer donor accepts a compatible patient request in U3.2.</p>
+            <button id="navToU32Btn" class="px-4 py-2 blood-red text-white font-bold text-xs rounded-xl">Review Requests (U3.2)</button>
+          </div>
+        `;
+      }
+      return `
+        <div class="space-y-5 max-w-4xl mx-auto">
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 flex justify-between items-center shadow-xs">
+            <div>
+              <span class="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">U4 – Matching Page</span>
+              <h2 class="text-xl font-black text-slate-900 mt-1">Donor Found & Patient Matched</h2>
+            </div>
+            <span class="text-xs font-mono font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg">ETA ~15 mins</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="bg-white p-5 rounded-2xl border border-red-200 shadow-xs">
+              <span class="text-xs font-bold blood-red-text">Patient Matched</span>
+              <h4 class="font-bold text-base text-slate-900 mt-1">${STATE.activeMatch.patientName}</h4>
+              <p class="text-xs text-slate-500 mt-1">Required: ${STATE.activeMatch.bloodGroup} (${STATE.activeMatch.units} Units)</p>
+              <p class="text-xs text-slate-500">Facility: ${STATE.activeMatch.hospital}</p>
+            </div>
+            <div class="bg-white p-5 rounded-2xl border border-blue-200 shadow-xs">
+              <span class="text-xs font-bold navy-text">Donor Found</span>
+              <h4 class="font-bold text-base text-slate-900 mt-1">${STATE.activeMatch.donorName}</h4>
+              <p class="text-xs text-slate-500 mt-1">Blood Group: ${STATE.activeMatch.bloodGroup}</p>
+              <p class="text-xs text-slate-500">Status: In Transit</p>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs text-center">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Arrival & Transfusion Progress</h4>
+            <div class="flex justify-between items-center max-w-md mx-auto text-xs font-bold">
+              <span class="text-emerald-700">1. Confirmed ✓</span>
+              <span class="text-emerald-700">2. En Route 🚚</span>
+              <span class="text-slate-400">3. Arrived 🏥</span>
+              <span class="text-slate-400">4. Complete ✨</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // U5: GROUPS
+    function viewU5() {
+      return `
+        <div class="space-y-6 max-w-4xl mx-auto">
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 flex justify-between items-center shadow-xs">
+            <div>
+              <span class="text-[10px] font-bold uppercase tracking-wider navy-text lavender-card px-2 py-0.5 rounded">U5 – Community Groups</span>
+              <h2 class="text-xl font-black text-slate-900 mt-1">Available Groups to Join</h2>
+            </div>
+            <button id="navHomeBtn3" class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg font-semibold">Back to Home</button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div class="bg-white p-5 rounded-2xl border border-slate-200">
+              <h4 class="font-bold text-sm text-slate-900 mb-3">To Create a New Group</h4>
+              <form id="createGroupForm" class="space-y-3 text-xs">
+                <input type="text" id="grpName" required placeholder="Group Name" class="w-full p-2.5 rounded-xl border border-slate-300">
+                <textarea id="grpDesc" required rows="2" placeholder="Description of blood collective" class="w-full p-2.5 rounded-xl border border-slate-300"></textarea>
+                <button type="submit" class="w-full py-2.5 navy-bg text-white font-bold rounded-xl shadow-xs">Create Group</button>
+              </form>
+            </div>
+
+            <div class="space-y-2">
+              <h4 class="font-bold text-sm text-slate-900">Available Groups</h4>
+              ${STATE.groups.length === 0 ? `
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 text-xs text-slate-400 text-center">No groups created yet.</div>
+              ` : STATE.groups.map(g => `
+                <div class="bg-white p-3.5 rounded-xl border border-slate-200 flex justify-between items-center text-xs">
+                  <div>
+                    <h5 class="font-bold text-slate-900">${g.name}</h5>
+                    <p class="text-slate-500">${g.description}</p>
+                  </div>
+                  <button class="joinGrpBtn px-3 py-1.5 ${g.isJoined ? 'bg-emerald-100 text-emerald-800' : 'blood-red text-white'} rounded-lg font-bold" data-id="${g.id}">
+                    ${g.isJoined ? 'Joined ✓' : 'Join'}
+                  </button>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // U6: APPOINTMENTS
+    function viewU6() {
+      return `
+        <div class="space-y-6 max-w-4xl mx-auto">
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 flex justify-between items-center shadow-xs">
+            <div>
+              <span class="text-[10px] font-bold uppercase tracking-wider navy-text lavender-card px-2 py-0.5 rounded">U6 – Medical Appointments</span>
+              <h2 class="text-xl font-black text-slate-900 mt-1">Doctor Consultation, Blood Test & Report</h2>
+            </div>
+            <button id="navHomeBtn4" class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg font-semibold">Back to Home</button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <!-- Booking Forms -->
+            <div class="space-y-3">
+              <div class="bg-white p-4 rounded-2xl border border-slate-200">
+                <h4 class="font-bold text-sm text-slate-900 mb-2">Request Service</h4>
+                <form id="bookAptForm" class="space-y-3 text-xs">
+                  <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Patient Name</label>
+                    <input type="text" id="aptName" required placeholder="Full Name" class="w-full p-2.5 rounded-xl border border-slate-300">
+                  </div>
+                  <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Service Type</label>
+                    <select id="aptService" class="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-semibold">
+                      <option value="doctor consultation">Doctor Consultation</option>
+                      <option value="blood test">Diagnostic Blood Test</option>
+                      <option value="report">Medical Report Request</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Preferred Date</label>
+                    <input type="date" id="aptDate" required class="w-full p-2.5 rounded-xl border border-slate-300">
+                  </div>
+                  <button type="submit" class="w-full py-2.5 navy-bg text-white font-bold rounded-xl shadow-xs">Submit to Doctor Dashboard (D2)</button>
+                </form>
+              </div>
+            </div>
+
+            <!-- Status Panel -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200">
+              <h4 class="font-bold text-sm text-slate-900 mb-2">Your Submitted Appointments</h4>
+              <div class="space-y-2.5">
+                ${STATE.appointments.length === 0 ? `
+                  <p class="text-xs text-slate-400 py-6 text-center">No appointments submitted yet.</p>
+                ` : STATE.appointments.map(a => `
+                  <div class="p-3 rounded-xl border border-slate-200 text-xs">
+                    <div class="flex justify-between items-center">
+                      <span class="font-bold capitalize text-slate-900">${a.service}</span>
+                      <span class="px-2 py-0.5 rounded font-bold ${a.status === 'Accepted' ? 'bg-emerald-100 text-emerald-800' : a.status === 'Cancelled' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}">${a.status}</span>
+                    </div>
+                    <p class="text-slate-500 mt-1">Requested: ${a.requestedDate}</p>
+                    ${a.acceptedTimeSlot ? `<p class="font-bold text-emerald-700 mt-1">Time Slot: ${a.acceptedTimeSlot}</p>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // EVENT LISTENERS & BACKEND OPERATIONS
+    function attachEvents() {
+      // Role Switcher in Top Bar
+      const switchRoleBtn = document.getElementById('switchRoleBtn');
+      if (switchRoleBtn) {
+        switchRoleBtn.onclick = () => {
+          STATE.role = STATE.role === 'doctor' ? 'user' : 'doctor';
+          STATE.currentView = STATE.role === 'doctor' ? 'D2' : 'U2';
+          render();
+        };
+      }
+
+      // D1 Tabs
+      const tabDoc = document.getElementById('tabDoc');
+      const tabUser = document.getElementById('tabUser');
+      if (tabDoc) tabDoc.onclick = () => { STATE.role = 'doctor'; render(); };
+      if (tabUser) tabUser.onclick = () => { STATE.role = 'user'; render(); };
+
+      const goToU1Btn = document.getElementById('goToU1Btn');
+      if (goToU1Btn) goToU1Btn.onclick = () => { STATE.currentView = 'U1'; render(); };
+
+      const docLoginForm = document.getElementById('docLoginForm');
+      if (docLoginForm) {
+        docLoginForm.onsubmit = (e) => {
+          e.preventDefault();
+          const email = document.getElementById('docEmail').value;
+          STATE.currentUser = { name: email.split('@')[0], email, role: 'doctor', isVerified: true };
+          STATE.currentView = 'D2';
+          showToast('Verified Doctor Login', `Welcome ${STATE.currentUser.name}`, 'success');
+          render();
+        };
+      }
+
+      // U1 Signup
+      const userSignupForm = document.getElementById('userSignupForm');
+      if (userSignupForm) {
+        userSignupForm.onsubmit = (e) => {
+          e.preventDefault();
+          STATE.currentUser = {
+            name: document.getElementById('uName').value,
+            phone: document.getElementById('uPhone').value,
+            bloodGroup: document.getElementById('uBloodGroup').value,
+            city: document.getElementById('uCity').value,
+            role: 'user',
+            isVerified: true
+          };
+          STATE.currentView = 'U2';
+          showToast('Account Registered', `Registered as ${STATE.currentUser.bloodGroup} user`, 'success');
+          render();
+        };
+      }
+
+      // U2 Buttons
+      const openPatientFormBtn = document.getElementById('openPatientFormBtn');
+      if (openPatientFormBtn) {
+        openPatientFormBtn.onclick = () => {
+          const patientName = prompt('Enter Patient Name:', STATE.currentUser.name || 'Patient');
+          if (!patientName) return;
+          const bloodGroup = prompt('Enter Blood Group (O-, O+, A-, A+, B-, B+, AB-, AB+):', STATE.currentUser.bloodGroup || 'O-') || 'O-';
+          const units = parseInt(prompt('Units required:', '2') || '2');
+          const hospital = prompt('Hospital / Clinic Facility:', 'Central Hospital') || 'Central Hospital';
+
+          const newReq = {
+            id: 'req-' + Date.now(),
+            patientName,
+            bloodGroup,
+            units,
+            hospital,
+            urgency: 'Emergency',
+            location: STATE.currentUser.city || 'Metro City',
+            status: 'Open',
+            createdAt: new Date().toISOString()
+          };
+
+          STATE.patientRequests.unshift(newReq);
+          saveState();
+          if (db) addDoc(collection(db, 'patientRequests'), newReq).catch(console.error);
+          showToast('Patient Request Published', `${units} units of ${bloodGroup} requested`, 'success');
+          STATE.currentView = 'U3.1';
+          render();
+        };
+      }
+
+      const openDonorFormBtn = document.getElementById('openDonorFormBtn');
+      if (openDonorFormBtn) {
+        openDonorFormBtn.onclick = () => {
+          const donorName = prompt('Enter Donor Full Name:', STATE.currentUser.name || 'Donor');
+          if (!donorName) return;
+          const bloodGroup = prompt('Your Blood Group (O-, O+, A-, A+, B-, B+, AB-, AB+):', STATE.currentUser.bloodGroup || 'O-') || 'O-';
+
+          const newDonor = {
+            id: 'donor-' + Date.now(),
+            donorName,
+            bloodGroup,
+            availability: 'Immediate',
+            location: STATE.currentUser.city || 'Metro City',
+            distanceKm: 1.2,
+            status: 'Available',
+            isVerified: true
+          };
+
+          STATE.donors.unshift(newDonor);
+          saveState();
+          if (db) addDoc(collection(db, 'donors'), newDonor).catch(console.error);
+          showToast('Donor Availability Declared', `Ready to help as ${bloodGroup} donor`, 'success');
+          STATE.currentView = 'U3.2';
+          render();
+        };
+      }
+
+      const navGroupsBtn = document.getElementById('navGroupsBtn');
+      if (navGroupsBtn) navGroupsBtn.onclick = () => { STATE.currentView = 'U5'; render(); };
+
+      const navAptBtn = document.getElementById('navAptBtn');
+      if (navAptBtn) navAptBtn.onclick = () => { STATE.currentView = 'U6'; render(); };
+
+      const navBackHomeBtn = document.getElementById('navBackHomeBtn');
+      if (navBackHomeBtn) navBackHomeBtn.onclick = () => { STATE.currentView = 'D1'; render(); };
+
+      const navHomeBtns = ['navHomeBtn', 'navHomeBtn2', 'navHomeBtn3', 'navHomeBtn4'];
+      navHomeBtns.forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.onclick = () => { STATE.currentView = 'U2'; render(); };
+      });
+
+      // U3.1 Request Button
+      document.querySelectorAll('.reqDonorBtn').forEach(btn => {
+        btn.onclick = (e) => {
+          showToast('Emergency Request Transmitted', 'Direct notification sent to volunteer donor', 'success');
+          btn.textContent = 'Requested ✓';
+          btn.disabled = true;
+        };
+      });
+
+      // U3.2 Accept Button -> Trigger Match (U4)
+      document.querySelectorAll('.acceptReqBtn').forEach(btn => {
+        btn.onclick = () => {
+          const id = btn.getAttribute('data-id');
+          const req = STATE.patientRequests.find(r => r.id === id);
+          if (!req) return;
+
+          const matchRecord = {
+            id: 'match-' + Date.now(),
+            patientName: req.patientName,
+            donorName: STATE.currentUser.name || 'Volunteer Hero',
+            bloodGroup: req.bloodGroup,
+            units: req.units,
+            hospital: req.hospital,
+            matchedAt: new Date().toISOString()
+          };
+
+          STATE.activeMatch = matchRecord;
+          req.status = 'Matched';
+          saveState();
+          if (db) addDoc(collection(db, 'matches'), matchRecord).catch(console.error);
+
+          showToast('Match Confirmed!', 'Donor accepted patient request. Live tracker active.', 'success');
+          STATE.currentView = 'U4';
+          render();
+        };
+      });
+
+      // D2 Doctor Accept / Cancel
+      document.querySelectorAll('.acceptAptBtn').forEach(btn => {
+        btn.onclick = () => {
+          const id = btn.getAttribute('data-id');
+          const slot = prompt('Assign Available Clinical Slot:', '10:30 AM - Room 204');
+          if (!slot) return;
+          const apt = STATE.appointments.find(a => a.id === id);
+          if (apt) {
+            apt.status = 'Accepted';
+            apt.acceptedTimeSlot = slot;
+            saveState();
+            showToast('Appointment Accepted', `Scheduled for ${slot}`, 'success');
+            render();
+          }
+        };
+      });
+
+      document.querySelectorAll('.cancelAptBtn').forEach(btn => {
+        btn.onclick = () => {
+          const id = btn.getAttribute('data-id');
+          const apt = STATE.appointments.find(a => a.id === id);
+          if (apt) {
+            apt.status = 'Cancelled';
+            saveState();
+            showToast('Appointment Cancelled', 'Status updated to Cancelled', 'info');
+            render();
+          }
+        };
+      });
+
+      // U5 Create Group
+      const createGroupForm = document.getElementById('createGroupForm');
+      if (createGroupForm) {
+        createGroupForm.onsubmit = (e) => {
+          e.preventDefault();
+          const name = document.getElementById('grpName').value;
+          const description = document.getElementById('grpDesc').value;
+          const newGrp = { id: 'grp-' + Date.now(), name, description, isJoined: true };
+          STATE.groups.unshift(newGrp);
+          saveState();
+          if (db) addDoc(collection(db, 'groups'), newGrp).catch(console.error);
+          showToast('Group Created', `"${name}" is now live`, 'success');
+          render();
+        };
+      }
+
+      // U6 Book Appointment
+      const bookAptForm = document.getElementById('bookAptForm');
+      if (bookAptForm) {
+        bookAptForm.onsubmit = (e) => {
+          e.preventDefault();
+          const newApt = {
+            id: 'apt-' + Date.now(),
+            patientName: document.getElementById('aptName').value,
+            service: document.getElementById('aptService').value,
+            requestedDate: document.getElementById('aptDate').value,
+            requestedTime: '10:00 AM',
+            status: 'Pending',
+            createdAt: new Date().toISOString()
+          };
+          STATE.appointments.unshift(newApt);
+          saveState();
+          if (db) addDoc(collection(db, 'appointments'), newApt).catch(console.error);
+          showToast('Appointment Submitted', 'Sent to Doctor Queue (D2)', 'success');
+          render();
+        };
+      }
+    }
+
+    // Initialize View
+    render();
+  </script>
+</body>
+</html>

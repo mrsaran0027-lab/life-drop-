@@ -1,0 +1,149 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account and role credentials for patients, donors, and verified medical doctors",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 150 },
+        "role": { "type": "string", "enum": ["doctor", "user"] },
+        "phone": { "type": "string", "maxLength": 30 },
+        "bloodGroup": { "type": "string", "enum": ["O-", "O+", "A-", "A+", "B-", "B+", "AB-", "AB+"] },
+        "city": { "type": "string", "maxLength": 100 },
+        "isVerified": { "type": "boolean" },
+        "hospitalName": { "type": "string", "maxLength": 150 },
+        "licenseNumber": { "type": "string", "maxLength": 50 },
+        "activeMode": { "type": "string", "enum": ["patient", "donor"] }
+      },
+      "required": ["id", "name", "role"]
+    },
+    "PatientRequest": {
+      "title": "PatientRequest",
+      "description": "Emergency or standard blood request created by a patient or attending facility",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "patientName": { "type": "string", "maxLength": 100 },
+        "bloodGroup": { "type": "string", "enum": ["O-", "O+", "A-", "A+", "B-", "B+", "AB-", "AB+"] },
+        "units": { "type": "number" },
+        "hospital": { "type": "string", "maxLength": 150 },
+        "urgency": { "type": "string", "enum": ["Emergency", "Urgent", "Standard"] },
+        "location": { "type": "string", "maxLength": 200 },
+        "city": { "type": "string", "maxLength": 100 },
+        "contactNumber": { "type": "string", "maxLength": 30 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "distanceKm": { "type": "number" },
+        "status": { "type": "string", "enum": ["Open", "Pending Confirmation", "Matched", "Fulfilled", "Cancelled"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "patientName", "bloodGroup", "units", "hospital", "urgency", "status"]
+    },
+    "DonorAvailability": {
+      "title": "DonorAvailability",
+      "description": "Volunteer blood donor availability declaration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "donorName": { "type": "string", "maxLength": 100 },
+        "bloodGroup": { "type": "string", "enum": ["O-", "O+", "A-", "A+", "B-", "B+", "AB-", "AB+"] },
+        "lastDonationDate": { "type": "string" },
+        "availability": { "type": "string", "enum": ["Immediate", "Today", "Within 24h"] },
+        "location": { "type": "string", "maxLength": 200 },
+        "city": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "distanceKm": { "type": "number" },
+        "isVerified": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["Available", "Requested", "Matched"] }
+      },
+      "required": ["id", "donorName", "bloodGroup", "availability", "status"]
+    },
+    "MedicalAppointment": {
+      "title": "MedicalAppointment",
+      "description": "Clinical consultation, blood test, or lab report request reviewed by doctors",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "patientName": { "type": "string", "maxLength": 100 },
+        "service": { "type": "string", "enum": ["doctor consultation", "blood test", "report"] },
+        "requestedDate": { "type": "string" },
+        "requestedTime": { "type": "string" },
+        "notes": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "enum": ["Pending", "Accepted", "Cancelled"] },
+        "acceptedTimeSlot": { "type": "string", "maxLength": 100 },
+        "doctorName": { "type": "string", "maxLength": 100 },
+        "department": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "patientName", "service", "requestedDate", "status"]
+    },
+    "DonorGroup": {
+      "title": "DonorGroup",
+      "description": "Community donor collective or specialized blood network",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 120 },
+        "description": { "type": "string", "maxLength": 500 },
+        "category": { "type": "string", "enum": ["Emergency Vanguard", "Hospital Auxiliary", "Rare Blood Network", "Community Lifesavers"] },
+        "location": { "type": "string", "maxLength": 100 },
+        "memberCount": { "type": "number" },
+        "isVerifiedOnly": { "type": "boolean" },
+        "leadCoordinator": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "name", "category", "memberCount"]
+    },
+    "MatchRecord": {
+      "title": "MatchRecord",
+      "description": "Active emergency blood match between donor and patient",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "patientRequestId": { "type": "string" },
+        "donorId": { "type": "string" },
+        "patientName": { "type": "string", "maxLength": 100 },
+        "donorName": { "type": "string", "maxLength": 100 },
+        "bloodGroup": { "type": "string", "enum": ["O-", "O+", "A-", "A+", "B-", "B+", "AB-", "AB+"] },
+        "units": { "type": "number" },
+        "hospital": { "type": "string", "maxLength": 150 },
+        "estimatedArrivalMins": { "type": "number" },
+        "receivingStatus": { "type": "string", "maxLength": 100 },
+        "arrivalStatus": { "type": "string", "maxLength": 100 },
+        "currentStep": { "type": "number" },
+        "matchedAt": { "type": "string" },
+        "patientPhone": { "type": "string", "maxLength": 30 },
+        "donorPhone": { "type": "string", "maxLength": 30 },
+        "vehicleInfo": { "type": "string", "maxLength": 150 }
+      },
+      "required": ["id", "patientRequestId", "donorId", "bloodGroup", "currentStep"]
+    }
+  },
+  "firestore": {
+    "/patientRequests/{requestId}": {
+      "schema": "PatientRequest",
+      "description": "Live blood requests created by patients in need of emergency transfusion"
+    },
+    "/donors/{donorId}": {
+      "schema": "DonorAvailability",
+      "description": "Active volunteer blood donors declared availability"
+    },
+    "/appointments/{appointmentId}": {
+      "schema": "MedicalAppointment",
+      "description": "Patient appointments queue synchronized between U6 and doctor dashboard D2"
+    },
+    "/groups/{groupId}": {
+      "schema": "DonorGroup",
+      "description": "Community blood drive groups and emergency brigades"
+    },
+    "/matches/{matchId}": {
+      "schema": "MatchRecord",
+      "description": "Confirmed patient and donor matches in transit"
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Registered patient and doctor user accounts"
+    }
+  }
+}

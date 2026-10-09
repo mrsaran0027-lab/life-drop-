@@ -1,0 +1,83 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Patient Blood Requests
+    match /patientRequests/{requestId} {
+      allow read: if true;
+      allow create: if incoming().patientName is string &&
+                       incoming().patientName.size() <= 100 &&
+                       incoming().bloodGroup in ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+'] &&
+                       incoming().units is number && incoming().units > 0 && incoming().units <= 10;
+      allow update: if incoming().bloodGroup in ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+'];
+      allow delete: if isSignedIn();
+    }
+
+    // Donors Registry
+    match /donors/{donorId} {
+      allow read: if true;
+      allow create: if incoming().donorName is string &&
+                       incoming().donorName.size() <= 100 &&
+                       incoming().bloodGroup in ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+'];
+      allow update: if incoming().bloodGroup in ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+'];
+      allow delete: if isSignedIn();
+    }
+
+    // Appointments (Synchronized between U6 and D2)
+    match /appointments/{appointmentId} {
+      allow read: if true;
+      allow create: if incoming().patientName is string &&
+                       incoming().service in ['doctor consultation', 'blood test', 'report'] &&
+                       incoming().status in ['Pending', 'Accepted', 'Cancelled'];
+      allow update: if incoming().status in ['Pending', 'Accepted', 'Cancelled'];
+      allow delete: if isSignedIn();
+    }
+
+    // Blood Groups
+    match /groups/{groupId} {
+      allow read: if true;
+      allow create: if incoming().name is string && incoming().name.size() <= 120;
+      allow update: if incoming().name is string;
+      allow delete: if isSignedIn();
+    }
+
+    // Active Matches
+    match /matches/{matchId} {
+      allow read: if true;
+      allow create: if incoming().bloodGroup in ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+'] &&
+                       incoming().currentStep is number;
+      allow update: if incoming().currentStep is number && incoming().currentStep >= 1 && incoming().currentStep <= 5;
+      allow delete: if isSignedIn();
+    }
+
+    // User Profiles
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update: if isValidId(userId);
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+  }
+}
