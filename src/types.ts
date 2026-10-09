@@ -15,6 +15,7 @@ export interface UserProfile {
   hospitalName?: string;
   licenseNumber?: string;
   activeMode?: UserMode;
+  isAuthenticated?: boolean;
 }
 
 export type UrgencyLevel = 'Emergency' | 'Urgent' | 'Standard';

@@ -265,3 +265,34 @@ export const MatchesDB = {
     }
   },
 };
+
+// ==========================================
+// 6. USERS COLLECTION (DOCTORS & PATIENTS)
+// ==========================================
+export const UsersDB = {
+  collectionPath: 'users',
+
+  async save(user: UserProfile): Promise<void> {
+    if (!db || !isFirebaseConfigured) return;
+    try {
+      await setDoc(doc(db, this.collectionPath, user.id), user);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `${this.collectionPath}/${user.id}`);
+    }
+  },
+
+  async get(id: string): Promise<UserProfile | null> {
+    if (!db || !isFirebaseConfigured) return null;
+    try {
+      const snap = await getDocs(query(collection(db, this.collectionPath), where('id', '==', id)));
+      if (!snap.empty) {
+        return snap.docs[0].data() as UserProfile;
+      }
+      return null;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.GET, `${this.collectionPath}/${id}`);
+      return null;
+    }
+  },
+};
+

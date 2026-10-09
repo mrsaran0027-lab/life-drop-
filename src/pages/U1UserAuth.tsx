@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import {
   Droplets,
@@ -9,8 +9,7 @@ import {
   MapPin,
   Lock,
   ArrowRight,
-  ArrowLeftRight,
-  CheckCircle2,
+  Mail,
   AlertCircle,
   Stethoscope,
 } from 'lucide-react';
@@ -18,7 +17,7 @@ import { BloodGroup } from '../types';
 
 export const U1UserAuth: React.FC = () => {
   const navigate = useNavigate();
-  const { loginUser, signupUser, switchUserRole } = useApp();
+  const { loginUser, signupUser, isAuthenticated, isDoctor } = useApp();
 
   // Mode: 'login' | 'signup'
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
@@ -30,7 +29,7 @@ export const U1UserAuth: React.FC = () => {
   // Sign up fields
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [bloodGroup, setBloodGroup] = useState<BloodGroup>('O-');
+  const [bloodGroup, setBloodGroup] = useState<BloodGroup>('O+');
   const [city, setCity] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
 
@@ -39,11 +38,26 @@ export const U1UserAuth: React.FC = () => {
 
   const bloodGroupOptions: BloodGroup[] = ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+'];
 
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      if (isDoctor) {
+        navigate('/doctor', { replace: true });
+      } else {
+        navigate('/home', { replace: true });
+      }
+    }
+  }, [isAuthenticated, isDoctor, navigate]);
+
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
 
+    if (!loginEmail) {
+      setError('Please provide your email address or username.');
+      return;
+    }
+
+    setLoading(true);
     setTimeout(() => {
       loginUser(loginEmail);
       setLoading(false);
@@ -68,11 +82,6 @@ export const U1UserAuth: React.FC = () => {
     }, 350);
   };
 
-  const handleSwitchToDoctor = () => {
-    switchUserRole('doctor');
-    navigate('/');
-  };
-
   return (
     <div className="min-h-screen bg-[#F8F9FC] flex flex-col justify-between text-slate-800">
       {/* Top Header */}
@@ -83,46 +92,22 @@ export const U1UserAuth: React.FC = () => {
           </div>
           <div>
             <h1 className="text-xl font-extrabold tracking-tight">LifeDrop</h1>
-            <p className="text-xs text-[#E6E6F2]/80 font-medium">Patient & Donor Registration</p>
+            <p className="text-xs text-[#E6E6F2]/80 font-medium">Patient & Donor Community Portal</p>
           </div>
         </div>
 
-        <button
-          onClick={handleSwitchToDoctor}
+        <Link
+          to="/"
           className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center gap-1.5 transition-colors border border-white/15"
         >
           <Stethoscope className="w-3.5 h-3.5 text-sky-300" />
-          <span>Switch to Doctor / Hospital</span>
-        </button>
+          <span>Doctor / Hospital Login</span>
+        </Link>
       </header>
 
       {/* Main Container */}
       <main className="flex-1 flex flex-col items-center justify-center px-4 py-8 sm:py-12">
         <div className="w-full max-w-lg mx-auto">
-          {/* Wireframe-Compliant "Switched user" Top Switch Bar (Page 3 Wireframe) */}
-          <div className="mb-6 flex flex-col items-center">
-            <div className="w-full bg-white p-1.5 rounded-2xl border-2 border-[#1F2A6B]/20 shadow-sm flex items-center justify-between">
-              <button
-                type="button"
-                onClick={handleSwitchToDoctor}
-                className="py-2.5 px-4 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-2 transition-colors"
-              >
-                <Stethoscope className="w-4 h-4 text-sky-400" />
-                <span>Admin & Doctor</span>
-              </button>
-
-              <div className="py-2.5 px-5 rounded-xl text-xs sm:text-sm font-bold bg-[#1F2A6B] text-white shadow-md flex items-center gap-2">
-                <User className="w-4 h-4 text-red-400" />
-                <span>Patient & User (Active)</span>
-              </div>
-            </div>
-
-            <div className="mt-2 flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Switched into User / Community Portal</span>
-            </div>
-          </div>
-
           {/* Centered Auth Card */}
           <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
             {/* Header with Mode Toggle (Login vs Create Account) */}
@@ -138,20 +123,20 @@ export const U1UserAuth: React.FC = () => {
               </p>
 
               {/* Sub-toggle between Login and Create Account */}
-              <div className="mt-5 inline-flex p-1 bg-black/20 rounded-xl border border-white/10">
+              <div className="mt-4 inline-flex bg-black/20 p-1 rounded-xl border border-white/10">
                 <button
                   type="button"
                   onClick={() => {
                     setAuthMode('login');
                     setError('');
                   }}
-                  className={`py-2 px-5 text-xs font-bold rounded-lg transition-all ${
+                  className={`py-1.5 px-5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                     authMode === 'login'
                       ? 'bg-white text-[#1F2A6B] shadow-sm'
                       : 'text-white/80 hover:text-white'
                   }`}
                 >
-                  Account Login
+                  Login
                 </button>
                 <button
                   type="button"
@@ -159,17 +144,18 @@ export const U1UserAuth: React.FC = () => {
                     setAuthMode('signup');
                     setError('');
                   }}
-                  className={`py-2 px-5 text-xs font-bold rounded-lg transition-all ${
+                  className={`py-1.5 px-5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                     authMode === 'signup'
-                      ? 'bg-white text-[#1F2A6B] shadow-sm'
+                      ? 'bg-red-600 text-white shadow-sm'
                       : 'text-white/80 hover:text-white'
                   }`}
                 >
-                  Create New Account
+                  Create Account
                 </button>
               </div>
             </div>
 
+            {/* Form Area */}
             <div className="p-6 sm:p-8">
               {error && (
                 <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
@@ -178,21 +164,24 @@ export const U1UserAuth: React.FC = () => {
                 </div>
               )}
 
-              {/* LOGIN FORM */}
               {authMode === 'login' ? (
+                /* Login Form */
                 <form onSubmit={handleLoginSubmit} className="space-y-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Email or Mobile Number
+                      Email Address or Phone Number
                     </label>
-                    <input
-                      type="text"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      placeholder="e.g. sarah.c@gmail.com"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-[#1F2A6B] focus:ring-2 focus:ring-[#1F2A6B]/20 outline-none text-sm bg-white"
-                      required
-                    />
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
+                        placeholder="e.g. sarah.jenkins@lifedrop.org"
+                        className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-[#1F2A6B] focus:ring-2 focus:ring-[#1F2A6B]/20 outline-none text-sm transition-all bg-white"
+                        required
+                      />
+                    </div>
                   </div>
 
                   <div>
@@ -206,7 +195,7 @@ export const U1UserAuth: React.FC = () => {
                         value={loginPassword}
                         onChange={(e) => setLoginPassword(e.target.value)}
                         placeholder="••••••••••••"
-                        className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-[#1F2A6B] focus:ring-2 focus:ring-[#1F2A6B]/20 outline-none text-sm bg-white"
+                        className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-[#1F2A6B] focus:ring-2 focus:ring-[#1F2A6B]/20 outline-none text-sm transition-all bg-white"
                         required
                       />
                     </div>
@@ -215,69 +204,79 @@ export const U1UserAuth: React.FC = () => {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full mt-4 py-3 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white shadow-lg shadow-red-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full mt-4 py-3 px-4 rounded-xl font-bold text-sm bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     {loading ? (
-                      <span>Accessing Portal...</span>
+                      <span>Signing In...</span>
                     ) : (
                       <>
-                        <span>Continue to User Home (U2)</span>
+                        <span>Enter Community Portal (U2)</span>
                         <ArrowRight className="w-4 h-4" />
                       </>
                     )}
                   </button>
                 </form>
               ) : (
-                /* CREATE ACCOUNT FORM */
+                /* Create Account Form */
                 <form onSubmit={handleSignupSubmit} className="space-y-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Full Legal Name
+                      Full Name
                     </label>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Marcus Taylor"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-[#1F2A6B] outline-none text-sm"
-                      required
-                    />
+                    <div className="relative">
+                      <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="e.g. Michael Chen"
+                        className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-[#1F2A6B] focus:ring-2 focus:ring-[#1F2A6B]/20 outline-none text-sm transition-all bg-white"
+                        required
+                      />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Phone / SMS Dispatch
+                        Phone Number
                       </label>
-                      <input
-                        type="text"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="+1 (555) 782-9011"
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-[#1F2A6B] outline-none text-sm"
-                        required
-                      />
+                      <div className="relative">
+                        <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="tel"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                          placeholder="+1 (555) 019-2834"
+                          className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-[#1F2A6B] focus:ring-2 focus:ring-[#1F2A6B]/20 outline-none text-sm transition-all bg-white"
+                          required
+                        />
+                      </div>
                     </div>
 
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        City / Neighborhood
+                        City / Metro
                       </label>
-                      <input
-                        type="text"
-                        value={city}
-                        onChange={(e) => setCity(e.target.value)}
-                        placeholder="e.g. Downtown Metro"
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-[#1F2A6B] outline-none text-sm"
-                        required
-                      />
+                      <div className="relative">
+                        <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={city}
+                          onChange={(e) => setCity(e.target.value)}
+                          placeholder="e.g. Metro West"
+                          className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-[#1F2A6B] focus:ring-2 focus:ring-[#1F2A6B]/20 outline-none text-sm transition-all bg-white"
+                          required
+                        />
+                      </div>
                     </div>
                   </div>
 
-                  {/* Blood Group Selection */}
+                  {/* Blood Group Picker */}
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                      Blood Group
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center justify-between">
+                      <span>Select Blood Group</span>
+                      <span className="text-[10px] text-red-600 font-bold">Matching Essential</span>
                     </label>
                     <div className="grid grid-cols-4 gap-2">
                       {bloodGroupOptions.map((bg) => (
@@ -285,9 +284,9 @@ export const U1UserAuth: React.FC = () => {
                           key={bg}
                           type="button"
                           onClick={() => setBloodGroup(bg)}
-                          className={`py-2 px-2 text-xs font-bold rounded-xl border text-center transition-all ${
+                          className={`py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
                             bloodGroup === bg
-                              ? 'bg-red-600 text-white border-red-600 shadow-md ring-2 ring-red-400/40'
+                              ? 'bg-red-600 text-white border-red-600 shadow-md scale-102'
                               : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                           }`}
                         >
@@ -299,28 +298,31 @@ export const U1UserAuth: React.FC = () => {
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Password
+                      Account Password
                     </label>
-                    <input
-                      type="password"
-                      value={signupPassword}
-                      onChange={(e) => setSignupPassword(e.target.value)}
-                      placeholder="••••••••••••"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-[#1F2A6B] outline-none text-sm"
-                      required
-                    />
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="password"
+                        value={signupPassword}
+                        onChange={(e) => setSignupPassword(e.target.value)}
+                        placeholder="••••••••••••"
+                        className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-[#1F2A6B] focus:ring-2 focus:ring-[#1F2A6B]/20 outline-none text-sm transition-all bg-white"
+                        required
+                      />
+                    </div>
                   </div>
 
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full mt-4 py-3 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-[#1F2A6B] to-[#2D3D94] hover:from-[#192358] hover:to-[#243177] text-white shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full mt-4 py-3 px-4 rounded-xl font-bold text-sm bg-[#1F2A6B] hover:bg-[#151c4a] text-white shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     {loading ? (
-                      <span>Registering...</span>
+                      <span>Creating Account...</span>
                     ) : (
                       <>
-                        <span>Complete Registration & Go to Home (U2)</span>
+                        <span>Complete Sign Up & Enter Portal</span>
                         <ArrowRight className="w-4 h-4" />
                       </>
                     )}
@@ -334,7 +336,7 @@ export const U1UserAuth: React.FC = () => {
 
       {/* Footer */}
       <footer className="py-4 text-center text-xs text-slate-500 border-t border-slate-200 bg-white">
-        LifeDrop System · Patient & Donor Emergency Network
+        LifeDrop System · Blood Donation Matching & Hospital Appointment Platform
       </footer>
     </div>
   );

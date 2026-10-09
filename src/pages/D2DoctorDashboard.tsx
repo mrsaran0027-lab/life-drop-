@@ -21,12 +21,12 @@ import {
 import { Appointment, AppointmentStatus } from '../types';
 
 export const D2DoctorDashboard: React.FC = () => {
-  const { currentUser, appointments, updateAppointmentStatus, switchUserRole } = useApp();
+  const { currentUser, appointments, updateAppointmentStatus } = useApp();
 
   // Selected filter
   const [statusFilter, setStatusFilter] = useState<'All' | AppointmentStatus>('All');
   const [selectedAppointmentForAccept, setSelectedAppointmentForAccept] = useState<Appointment | null>(null);
-  const [chosenTimeSlot, setChosenTimeSlot] = useState('10:30 AM');
+  const [chosenTimeSlot, setChosenTimeSlot] = useState('10:30 AM - Morning Slot');
   const [customSlot, setCustomSlot] = useState('');
 
   // Pre-configured clinic slots for fast selection
@@ -38,8 +38,6 @@ export const D2DoctorDashboard: React.FC = () => {
     '03:30 PM - Afternoon Slot',
     '05:00 PM - Evening Slot',
   ];
-
-  const isDoctor = currentUser.role === 'doctor';
 
   const handleOpenAcceptModal = (apt: Appointment) => {
     setSelectedAppointmentForAccept(apt);
@@ -69,27 +67,6 @@ export const D2DoctorDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Role Verification Banner (if user navigated while not doctor) */}
-      {!isDoctor && (
-        <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
-            <div>
-              <p className="text-sm font-bold text-amber-900">Doctor Access Verification Notice</p>
-              <p className="text-xs text-amber-700">
-                You are currently previewing as regular user ({currentUser.name}). Switch to Verified Doctor to test D2 workflow.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => switchUserRole('doctor')}
-            className="px-4 py-2 bg-[#1F2A6B] text-white rounded-xl text-xs font-bold hover:bg-[#151c4a] transition-all shrink-0 cursor-pointer"
-          >
-            Switch to Doctor Account
-          </button>
-        </div>
-      )}
-
       {/* D2 Header Overview */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -99,278 +76,304 @@ export const D2DoctorDashboard: React.FC = () => {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[#1F2A6B] bg-[#E6E6F2] px-2.5 py-0.5 rounded-md">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-sky-700 bg-sky-50 px-2.5 py-0.5 rounded-md">
                   D2 – Doctor Dashboard
                 </span>
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                  <ShieldCheck className="w-3 h-3" />
-                  Verified Hospital Desk
+                <span className="text-xs text-slate-500 font-mono">
+                  {currentUser.licenseNumber || 'Verified License'}
                 </span>
               </div>
-              <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-1">
-                {currentUser.name}
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+                Clinical Appointment Requests & Verification
               </h2>
-              <p className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
-                <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                <span>{currentUser.hospitalName || 'Verified Clinical Hospital Desk'}</span>
-                <span>·</span>
-                <span>Transfusion & Consultation Schedule</span>
+              <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
+                Hospital facility: <strong className="text-[#1F2A6B]">{currentUser.hospitalName || 'St. Jude Medical Center'}</strong>. Review incoming patient requests, assign time slots, or cancel.
               </p>
             </div>
           </div>
 
-          {/* Quick Metrics */}
-          <div className="grid grid-cols-3 gap-3 border-t lg:border-t-0 lg:border-l border-slate-200 pt-4 lg:pt-0 lg:pl-6">
-            <div className="bg-amber-50/70 border border-amber-200/60 rounded-xl p-3 text-center">
-              <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wide">Pending Review</span>
-              <p className="text-2xl font-black text-amber-600 font-mono mt-0.5">{pendingCount}</p>
+          <div className="flex items-center gap-2 sm:gap-3 bg-[#E6E6F2]/70 p-2.5 rounded-2xl border border-slate-200 shrink-0">
+            <div className="px-3 py-1.5 bg-white rounded-xl text-center shadow-2xs">
+              <span className="text-xs text-slate-500 font-medium block">Pending</span>
+              <span className="text-base font-extrabold text-amber-600">{pendingCount}</span>
             </div>
-            <div className="bg-emerald-50/70 border border-emerald-200/60 rounded-xl p-3 text-center">
-              <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide">Accepted</span>
-              <p className="text-2xl font-black text-emerald-600 font-mono mt-0.5">{acceptedCount}</p>
+            <div className="px-3 py-1.5 bg-white rounded-xl text-center shadow-2xs">
+              <span className="text-xs text-slate-500 font-medium block">Accepted</span>
+              <span className="text-base font-extrabold text-emerald-600">{acceptedCount}</span>
             </div>
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
-              <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Total</span>
-              <p className="text-2xl font-black text-slate-800 font-mono mt-0.5">{appointments.length}</p>
+            <div className="px-3 py-1.5 bg-white rounded-xl text-center shadow-2xs">
+              <span className="text-xs text-slate-500 font-medium block">Total</span>
+              <span className="text-base font-extrabold text-[#1F2A6B]">{appointments.length}</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Main Appointment Requests Table (Matches Page 2 Wireframe) */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        {/* Table Toolbar & Filters */}
-        <div className="p-4 sm:p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h3 className="text-base font-bold text-slate-900">
-              Users Request for Appointment
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Review incoming patient bookings from U6. Accept by available time slot or cancel.
-            </p>
-          </div>
-
-          {/* Segmented Filter */}
-          <div className="flex items-center gap-1.5 bg-[#E6E6F2]/70 p-1 rounded-xl">
-            {(['All', 'Pending', 'Accepted', 'Cancelled'] as const).map((filter) => (
-              <button
-                key={filter}
-                onClick={() => setStatusFilter(filter)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  statusFilter === filter
-                    ? 'bg-[#1F2A6B] text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {filter}
-              </button>
-            ))}
-          </div>
+      {/* Filter Toolbar */}
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+          <Filter className="w-3.5 h-3.5 text-slate-400" />
+          <span>Filter Requests:</span>
         </div>
 
-        {/* Requests List */}
+        <div className="flex items-center gap-1.5">
+          {(['All', 'Pending', 'Accepted', 'Cancelled'] as const).map((filter) => (
+            <button
+              key={filter}
+              onClick={() => setStatusFilter(filter)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                statusFilter === filter
+                  ? 'bg-[#1F2A6B] text-white shadow-xs font-bold'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {filter}
+              {filter === 'Pending' && pendingCount > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.2 bg-amber-500 text-white rounded-full text-[10px]">
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Table / List of Appointment Requests (Matches Page 2 Wireframe) */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         {filteredAppointments.length === 0 ? (
-          <div className="py-16 text-center text-slate-500">
-            <CalendarClock className="w-12 h-12 mx-auto text-slate-300 mb-2" />
-            <p className="text-sm font-semibold">No appointments found matching this filter</p>
-            <p className="text-xs text-slate-400 mt-1">
-              New submissions from U6 (Appointments page) will appear here instantly.
+          <div className="p-10 text-center text-slate-500 space-y-2">
+            <CalendarClock className="w-12 h-12 mx-auto text-slate-300" />
+            <h3 className="text-base font-bold text-slate-800">No Appointment Requests In Queue</h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              {appointments.length === 0
+                ? 'When community users submit consultation or blood test requests from the Appointments page (U6), they appear here in real-time for doctor confirmation.'
+                : `No appointment requests found matching filter: "${statusFilter}".`}
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
-            {filteredAppointments.map((apt) => {
-              const isPending = apt.status === 'Pending';
-              const isAccepted = apt.status === 'Accepted';
-              const isCancelled = apt.status === 'Cancelled';
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="py-3.5 px-4 sm:px-6">Patient & Service</th>
+                  <th className="py-3.5 px-4">Requested Date & Time</th>
+                  <th className="py-3.5 px-4">Clinical Department</th>
+                  <th className="py-3.5 px-4 text-center">Status</th>
+                  <th className="py-3.5 px-4 sm:px-6 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {filteredAppointments.map((apt) => {
+                  const isPending = apt.status === 'Pending';
+                  const isAccepted = apt.status === 'Accepted';
+                  const isCancelled = apt.status === 'Cancelled';
 
-              return (
-                <div
-                  key={apt.id}
-                  className="p-4 sm:p-5 hover:bg-slate-50/80 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4"
-                >
-                  {/* Left Column: Patient info & Service */}
-                  <div className="flex items-start gap-4 flex-1">
-                    <div
-                      className={`w-11 h-11 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 shadow-xs ${
-                        apt.service === 'doctor consultation'
-                          ? 'bg-[#1F2A6B] text-white'
-                          : apt.service === 'blood test'
-                          ? 'bg-red-600 text-white'
-                          : 'bg-indigo-600 text-white'
-                      }`}
+                  return (
+                    <tr
+                      key={apt.id}
+                      className="hover:bg-slate-50/80 transition-colors"
                     >
-                      {apt.patientName.charAt(0)}
-                    </div>
-
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="font-bold text-sm text-slate-900">{apt.patientName}</h4>
-                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 capitalize border border-slate-200">
-                          {apt.service}
-                        </span>
-                        <span className="text-xs text-slate-400 font-mono">ID: {apt.id}</span>
-                      </div>
-
-                      <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
-                        <span className="flex items-center gap-1 font-medium text-slate-700">
-                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                          Requested: {apt.requestedDate} ({apt.requestedTime})
-                        </span>
-                        <span>·</span>
-                        <span className="text-slate-600 truncate max-w-sm">
-                          Notes: {apt.notes || 'Routine checkup request'}
-                        </span>
-                      </div>
-
-                      {/* Display assigned slot if accepted */}
-                      {isAccepted && apt.acceptedTimeSlot && (
-                        <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 mt-1">
-                          <Clock className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Assigned Time: {apt.acceptedTimeSlot}</span>
+                      {/* Patient & Service */}
+                      <td className="py-4 px-4 sm:px-6">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                              apt.service === 'doctor consultation'
+                                ? 'bg-sky-100 text-sky-700'
+                                : apt.service === 'blood test'
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-purple-100 text-purple-700'
+                            }`}
+                          >
+                            {apt.service === 'doctor consultation' && <Stethoscope className="w-4 h-4" />}
+                            {apt.service === 'blood test' && <Droplets className="w-4 h-4" />}
+                            {apt.service === 'report' && <Activity className="w-4 h-4" />}
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-900 block text-sm">
+                              {apt.patientName}
+                            </span>
+                            <span className="text-[11px] text-slate-500 capitalize font-medium">
+                              {apt.service}
+                            </span>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  </div>
+                      </td>
 
-                  {/* Middle Column: Doctor Action Buttons (Accept / Cancel) */}
-                  <div className="flex items-center gap-2 sm:justify-end shrink-0">
-                    {isPending ? (
-                      <>
-                        <button
-                          onClick={() => handleOpenAcceptModal(apt)}
-                          className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Check className="w-4 h-4" />
-                          <span>Accept & Pick Time</span>
-                        </button>
+                      {/* Requested Date & Time */}
+                      <td className="py-4 px-4 font-medium text-slate-700">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-800 font-semibold">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{apt.requestedDate}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-0.5">
+                          <Clock className="w-3 h-3 text-slate-400" />
+                          <span>{apt.requestedTime}</span>
+                        </div>
+                      </td>
 
-                        <button
-                          onClick={() => handleCancelAppointment(apt.id)}
-                          className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <X className="w-4 h-4" />
-                          <span>Cancel</span>
-                        </button>
-                      </>
-                    ) : (
-                      <div className="text-xs text-slate-400 italic">
-                        {isAccepted ? 'Action completed' : 'Marked cancelled'}
-                      </div>
-                    )}
+                      {/* Department */}
+                      <td className="py-4 px-4">
+                        <span className="text-xs text-slate-700 font-medium block">
+                          {apt.department || 'Outpatient Clinic'}
+                        </span>
+                        {apt.notes && (
+                          <span className="text-[11px] text-slate-500 line-clamp-1 italic">
+                            "{apt.notes}"
+                          </span>
+                        )}
+                      </td>
 
-                    {/* Right-Side Column: Status Badge per Request (Matches Wireframe Page 2) */}
-                    <div className="pl-3 sm:border-l border-slate-200 min-w-[110px] text-right">
-                      <span
-                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${
-                          isAccepted
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                            : isCancelled
-                            ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                            : 'bg-amber-100 text-amber-800 border border-amber-300 animate-pulse'
-                        }`}
-                      >
-                        {isAccepted && <CheckCircle className="w-3 h-3 text-emerald-600" />}
-                        {isCancelled && <XCircle className="w-3 h-3 text-rose-600" />}
-                        {isPending && <Clock className="w-3 h-3 text-amber-600" />}
-                        {apt.status}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                      {/* Status Badge */}
+                      <td className="py-4 px-4 text-center">
+                        {isPending && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                            <Clock className="w-3 h-3" />
+                            Pending Review
+                          </span>
+                        )}
+                        {isAccepted && (
+                          <div className="inline-flex flex-col items-center">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <CheckCircle className="w-3 h-3" />
+                              Accepted
+                            </span>
+                            {apt.acceptedTimeSlot && (
+                              <span className="text-[10px] text-emerald-800 font-medium mt-0.5">
+                                Slot: {apt.acceptedTimeSlot}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {isCancelled && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                            <XCircle className="w-3 h-3" />
+                            Cancelled
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Actions (Accept / Cancel) */}
+                      <td className="py-4 px-4 sm:px-6 text-right">
+                        {isPending ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => handleOpenAcceptModal(apt)}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition-all shadow-xs cursor-pointer"
+                              title="Accept & Choose Available Time Slot"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Accept</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleCancelAppointment(apt.id)}
+                              className="px-3 py-1.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-600 rounded-lg font-bold text-xs flex items-center gap-1 transition-all border border-slate-200 cursor-pointer"
+                              title="Cancel Request"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              <span>Cancel</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="text-right">
+                            <span className="text-[11px] text-slate-400 font-medium italic">
+                              {isAccepted ? 'Confirmed in schedule' : 'Request dismissed'}
+                            </span>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {/* Accept Time Slot Modal (Pick available time) */}
+      {/* Available Time Slot Picker Modal (Wireframe: "Accept -> Choose available time slot") */}
       {selectedAppointmentForAccept && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
             <div className="bg-[#1F2A6B] p-5 text-white flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-sky-200">
-                  Doctor Scheduling
-                </span>
-                <h3 className="text-lg font-bold text-white mt-0.5">
-                  Confirm Time Slot for {selectedAppointmentForAccept.patientName}
-                </h3>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
+                  <CalendarClock className="w-5 h-5 text-emerald-300" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white">Choose Available Time Slot</h3>
+                  <p className="text-xs text-[#E6E6F2]/80">
+                    Patient: {selectedAppointmentForAccept.patientName} ({selectedAppointmentForAccept.service})
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setSelectedAppointmentForAccept(null)}
-                className="text-white/70 hover:text-white p-1 rounded-lg"
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Modal Body */}
             <div className="p-6 space-y-4">
-              <div className="bg-[#E6E6F2]/50 p-3 rounded-xl border border-slate-200 text-xs text-slate-700">
-                <p>
-                  <strong>Service:</strong> {selectedAppointmentForAccept.service}
-                </p>
-                <p>
-                  <strong>Patient Requested Date:</strong> {selectedAppointmentForAccept.requestedDate}
-                </p>
+              <p className="text-xs text-slate-600">
+                Requested Date: <strong>{selectedAppointmentForAccept.requestedDate}</strong>. Select the clinic time slot to assign to this appointment:
+              </p>
+
+              {/* Standard Slots Grid */}
+              <div className="grid grid-cols-2 gap-2">
+                {standardTimeSlots.map((slot) => (
+                  <button
+                    key={slot}
+                    type="button"
+                    onClick={() => {
+                      setChosenTimeSlot(slot);
+                      setCustomSlot('');
+                    }}
+                    className={`p-2.5 rounded-xl text-xs font-semibold text-left transition-all border cursor-pointer ${
+                      chosenTimeSlot === slot && !customSlot
+                        ? 'bg-[#1F2A6B] text-white border-[#1F2A6B] shadow-sm font-bold'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {slot}
+                  </button>
+                ))}
               </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wide text-slate-700 mb-2">
-                  Choose Available Clinical Slot:
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {standardTimeSlots.map((slot) => (
-                    <button
-                      key={slot}
-                      type="button"
-                      onClick={() => {
-                        setChosenTimeSlot(slot);
-                        setCustomSlot('');
-                      }}
-                      className={`p-2.5 rounded-xl border text-left text-xs font-semibold transition-all ${
-                        chosenTimeSlot === slot && !customSlot
-                          ? 'bg-[#1F2A6B] text-white border-[#1F2A6B] shadow-sm'
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      {slot}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
+              {/* Or Custom Slot Input */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Or Specify Custom Time & Room (e.g., 03:15 PM - Room 402):
+                  Or Specify Custom Time Slot:
                 </label>
                 <input
                   type="text"
                   value={customSlot}
                   onChange={(e) => setCustomSlot(e.target.value)}
-                  placeholder="e.g. 04:15 PM - Oncology Wing"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-[#1F2A6B] outline-none text-xs font-medium"
+                  placeholder="e.g. 01:15 PM - Urgent Trauma Bay"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs focus:border-[#1F2A6B] focus:ring-2 focus:ring-[#1F2A6B]/20 outline-none"
                 />
               </div>
 
-              {/* Action Buttons */}
-              <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-200">
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setSelectedAppointmentForAccept(null)}
-                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handleConfirmAccept}
-                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md transition-all flex items-center gap-1.5"
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
-                  <span>Confirm Appointment</span>
+                  <span>Confirm & Schedule</span>
                 </button>
               </div>
             </div>

@@ -22,6 +22,7 @@ import {
   AppointmentsDB,
   GroupsDB,
   MatchesDB,
+  UsersDB,
 } from '../services/db';
 import { isFirebaseConfigured } from '../services/firebase';
 
@@ -34,6 +35,9 @@ export interface ToastMessage {
 
 interface AppContextType {
   currentUser: UserProfile;
+  isAuthenticated: boolean;
+  isDoctor: boolean;
+  isUser: boolean;
   patientRequests: PatientRequest[];
   donors: DonorAvailability[];
   appointments: Appointment[];
@@ -41,8 +45,7 @@ interface AppContextType {
   activeMatch: MatchRecord | null;
   toasts: ToastMessage[];
 
-  // User & Role actions
-  switchUserRole: (targetRole: UserRole) => void;
+  // User & Auth actions (2 distinct logins, strictly no role-switching while logged in)
   setCurrentUser: (user: UserProfile) => void;
   setUserMode: (mode: UserMode) => void;
   loginDoctor: (emailOrId: string, facilityId?: string, doctorName?: string) => boolean;
@@ -81,27 +84,31 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Version 2 storage keys ensuring clean state without pre-entered demo records
+// Storage keys ensuring clean state without pre-entered demo records
 const STORAGE_KEYS = {
-  USER: 'lifedrop_v2_current_user',
-  REQUESTS: 'lifedrop_v2_patient_requests',
-  DONORS: 'lifedrop_v2_donors',
-  APPOINTMENTS: 'lifedrop_v2_appointments',
-  GROUPS: 'lifedrop_v2_groups',
-  MATCH: 'lifedrop_v2_active_match',
+  USER: 'lifedrop_app_user_v3',
+  REQUESTS: 'lifedrop_app_requests_v3',
+  DONORS: 'lifedrop_app_donors_v3',
+  APPOINTMENTS: 'lifedrop_app_appointments_v3',
+  GROUPS: 'lifedrop_app_groups_v3',
+  MATCH: 'lifedrop_app_match_v3',
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUserState] = useState<UserProfile>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.USER);
-      if (stored) return JSON.parse(stored);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && parsed.role) return parsed;
+      }
     } catch (e) {
       console.error(e);
     }
     return DEFAULT_PATIENT_USER;
   });
 
+  // Empty initial data (no pre-entered demo entries)
   const [patientRequests, setPatientRequests] = useState<PatientRequest[]>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.REQUESTS);
@@ -154,9 +161,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  // Local storage synchronization
+  // Derived auth state
+  const isAuthenticated = Boolean(currentUser && currentUser.isAuthenticated);
+  const isDoctor = Boolean(currentUser && currentUser.role === 'doctor' && currentUser.isAuthenticated);
+  const isUser = Boolean(currentUser && currentUser.role === 'user' && currentUser.isAuthenticated);
+
+  // Sync state to local storage
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(currentUser));
+    if (currentUser && currentUser.isAuthenticated) {
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.USER);
+    }
   }, [currentUser]);
 
   useEffect(() => {
@@ -168,24 +184,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [donors]);
 
   useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(appointments));
+  }, [appointments]);
+
+  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.GROUPS, JSON.stringify(groups));
   }, [groups]);
+
+  useEffect(() => {
+    if (activeMatch) {
+      localStorage.setItem(STORAGE_KEYS.MATCH, JSON.stringify(activeMatch));
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.MATCH);
+    }
+  }, [activeMatch]);
 
   // Real-time Firestore sync when live Firebase credentials exist
   useEffect(() => {
     if (!isFirebaseConfigured) return;
 
     const unsubReqs = PatientRequestsDB.subscribe((data) => {
-      if (data && data.length > 0) setPatientRequests(data);
+      if (data) setPatientRequests(data);
     });
     const unsubDonors = DonorsDB.subscribe((data) => {
-      if (data && data.length > 0) setDonors(data);
+      if (data) setDonors(data);
     });
     const unsubApts = AppointmentsDB.subscribe((data) => {
-      if (data && data.length > 0) setAppointments(data);
+      if (data) setAppointments(data);
     });
     const unsubGroups = GroupsDB.subscribe((data) => {
-      if (data && data.length > 0) setGroups(data);
+      if (data) setGroups(data);
     });
 
     return () => {
@@ -195,14 +223,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (unsubGroups) unsubGroups();
     };
   }, []);
-
-  useEffect(() => {
-    if (activeMatch) {
-      localStorage.setItem(STORAGE_KEYS.MATCH, JSON.stringify(activeMatch));
-    } else {
-      localStorage.removeItem(STORAGE_KEYS.MATCH);
-    }
-  }, [activeMatch]);
 
   const addToast = (title: string, description?: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = 'toast-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
@@ -222,62 +242,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentUserState(user);
   };
 
-  const switchUserRole = (targetRole: UserRole) => {
-    if (targetRole === 'doctor') {
-      setCurrentUserState((prev) => ({
-        ...prev,
-        role: 'doctor',
-        name: prev.name && prev.name !== 'Community User' ? prev.name : 'Doctor / Hospital Admin',
-        isVerified: true,
-      }));
-      addToast('Switched to Doctor Mode', 'Viewing Doctor / Hospital portal', 'info');
-    } else {
-      setCurrentUserState((prev) => ({
-        ...prev,
-        role: 'user',
-        name: prev.name && prev.name !== 'Doctor / Hospital Admin' ? prev.name : 'User',
-      }));
-      addToast('Switched to User Mode', 'Viewing Patient / Donor portal', 'info');
-    }
-  };
-
   const setUserMode = (mode: UserMode) => {
     setCurrentUserState((prev) => ({ ...prev, activeMode: mode }));
   };
 
+  // 1. Doctor / Hospital Login (Strict Doctor Portal access)
   const loginDoctor = (emailOrId: string, facilityId?: string, doctorName?: string) => {
     const docUser: UserProfile = {
       id: 'doc-' + Date.now().toString(36),
       name: doctorName || (emailOrId ? emailOrId.split('@')[0] : 'Verified Doctor'),
-      email: emailOrId,
+      email: emailOrId || 'doctor@lifedrop.med',
       role: 'doctor',
-      phone: '',
-      hospitalName: facilityId ? `Facility #${facilityId}` : 'Hospital Center',
-      licenseNumber: facilityId || '',
-      city: '',
+      phone: '+1 (555) 018-9281',
+      hospitalName: facilityId ? `Hospital Facility #${facilityId}` : 'St. Jude General Hospital',
+      licenseNumber: facilityId || 'MD-84920-VERIFIED',
+      city: 'Metro Medical Center',
       isVerified: true,
+      isAuthenticated: true,
     };
+
     setCurrentUserState(docUser);
-    addToast('Verified Doctor Portal Access', `Signed in as ${docUser.name}`, 'success');
+    UsersDB.save(docUser);
+    addToast('Verified Doctor Portal Access', `Welcome, ${docUser.name}. Signed into Doctor Dashboard.`, 'success');
     return true;
   };
 
+  // 2. User / Community Login (Strict Patient/Donor Portal access)
   const loginUser = (email: string) => {
     const user: UserProfile = {
       id: 'user-' + Date.now().toString(36),
-      name: email ? email.split('@')[0] : 'User',
-      email,
+      name: email ? email.split('@')[0] : 'Community Member',
+      email: email || 'user@lifedrop.org',
       role: 'user',
-      phone: '',
-      city: '',
+      phone: '+1 (555) 019-3382',
+      bloodGroup: 'O+',
+      city: 'Downtown Metro',
       isVerified: true,
       activeMode: 'patient',
+      isAuthenticated: true,
     };
+
     setCurrentUserState(user);
-    addToast('Signed In', `Welcome back, ${user.name}`, 'success');
+    UsersDB.save(user);
+    addToast('Signed In Successfully', `Welcome back, ${user.name}.`, 'success');
     return true;
   };
 
+  // 2b. User Sign-up (Patient & Donor)
   const signupUser = (details: {
     name: string;
     phone: string;
@@ -294,14 +305,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       city: details.city,
       isVerified: true,
       activeMode: 'patient',
+      isAuthenticated: true,
     };
+
     setCurrentUserState(newUser);
-    addToast('Account Created Successfully', `Registered as ${newUser.bloodGroup} user`, 'success');
+    UsersDB.save(newUser);
+    addToast('Account Created Successfully', `Registered as ${newUser.bloodGroup} donor/patient.`, 'success');
   };
 
+  // Logout (The only way to leave either role)
   const logout = () => {
     setCurrentUserState(DEFAULT_PATIENT_USER);
-    addToast('Signed Out', 'Returned to landing page', 'info');
+    localStorage.removeItem(STORAGE_KEYS.USER);
+    addToast('Signed Out', 'You have been logged out. Return to portal login to switch accounts.', 'info');
   };
 
   // Add Patient Request (from U2)
@@ -362,8 +378,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     addToast(
-      'Request Sent',
-      `Direct notification sent to donor ${targetDonor.donorName} (${targetDonor.bloodGroup})`,
+      'Direct Request Sent',
+      `Notification sent to volunteer donor ${targetDonor.donorName} (${targetDonor.bloodGroup})`,
       'info'
     );
   };
@@ -383,13 +399,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (currentUser.bloodGroup) {
         activeDonor = {
           id: currentUser.id,
-          donorName: currentUser.name || 'Anonymous Donor',
+          donorName: currentUser.name || 'Volunteer Donor',
           bloodGroup: currentUser.bloodGroup,
           lastDonationDate: new Date().toISOString().split('T')[0],
           availability: 'Immediate',
-          location: currentUser.city || 'Local Area',
-          city: currentUser.city || 'Local Area',
-          phone: currentUser.phone || '',
+          location: currentUser.city || 'Metro Area',
+          city: currentUser.city || 'Metro Area',
+          phone: currentUser.phone || '+1 (555) 019-3382',
           distanceKm: 1.5,
           lat: 0,
           lng: 0,
@@ -402,12 +418,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activeDonor = {
           id: 'donor-direct',
           donorName: currentUser.name || 'Volunteer Donor',
-          bloodGroup: patientReq.bloodGroup, // match same blood group
+          bloodGroup: patientReq.bloodGroup, // match same compatible blood group
           lastDonationDate: new Date().toISOString().split('T')[0],
           availability: 'Immediate',
-          location: 'Local Area',
-          city: 'Local Area',
-          phone: currentUser.phone || '',
+          location: 'Metro Area',
+          city: 'Metro Area',
+          phone: currentUser.phone || '+1 (555) 019-3382',
           distanceKm: 1.2,
           lat: 0,
           lng: 0,
@@ -417,10 +433,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    // Blood compatibility check
+    // Blood compatibility verification
     const compatible = isBloodCompatible(activeDonor.bloodGroup, patientReq.bloodGroup);
     if (!compatible) {
-      const msg = `Blood incompatibility: Donor (${activeDonor.bloodGroup}) cannot donate to Patient (${patientReq.bloodGroup}).`;
+      const msg = `Blood incompatibility: Donor (${activeDonor.bloodGroup}) cannot donate to recipient (${patientReq.bloodGroup}).`;
       addToast('Matching Incompatible', msg, 'error');
       return { success: false, message: msg };
     }
@@ -443,7 +459,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       matchedAt: new Date().toISOString(),
       patientPhone: patientReq.contactNumber,
       donorPhone: activeDonor.phone,
-      vehicleInfo: 'Direct Rapid Transport',
+      vehicleInfo: 'Direct Emergency Transit',
     };
 
     setActiveMatch(newMatch);
@@ -465,7 +481,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     addToast(
       'Blood Match Confirmed!',
-      `Donor ${activeDonor.donorName} matched for patient ${patientReq.patientName}. Proceeding to Live Tracking.`,
+      `Donor ${activeDonor.donorName} matched for patient ${patientReq.patientName}. Transfusion logistics initiated.`,
       'success'
     );
 
@@ -511,14 +527,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'Pending',
       createdAt: new Date().toISOString(),
       doctorName: apt.doctorName || 'Attending Physician',
-      department: apt.department || 'Medical Department',
+      department: apt.department || 'Clinical Department',
     };
 
     setAppointments((prev) => [newApt, ...prev]);
     AppointmentsDB.create(newApt);
     addToast(
       'Appointment Submitted',
-      `Requested ${newApt.service} for ${newApt.requestedDate}. Sent to Doctor Dashboard.`,
+      `Requested ${newApt.service} for ${newApt.requestedDate}. Transmitted to Doctor Dashboard.`,
       'success'
     );
     return id;
@@ -547,7 +563,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (status === 'Accepted') {
       addToast(
         'Appointment Confirmed',
-        `Scheduled for ${acceptedTimeSlot || 'assigned slot'}. User notified in U6 panel.`,
+        `Scheduled for ${acceptedTimeSlot || 'assigned slot'}. Status synced in U6 appointments panel.`,
         'success'
       );
     } else {
@@ -571,7 +587,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setGroups((prev) => [newGroup, ...prev]);
     GroupsDB.create(newGroup);
-    addToast('Group Created!', `"${name}" is now available.`, 'success');
+    addToast('Group Created!', `"${name}" is now active in the network.`, 'success');
     return true;
   };
 
@@ -600,13 +616,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider
       value={{
         currentUser,
+        isAuthenticated,
+        isDoctor,
+        isUser,
         patientRequests,
         donors,
         appointments,
         groups,
         activeMatch,
         toasts,
-        switchUserRole,
         setCurrentUser,
         setUserMode,
         loginDoctor,
